@@ -1,300 +1,646 @@
-# NoteShare — Secure Expiring Notes
+# Note-Taking App
 
-A full-stack MERN application for creating notes with secure, expiring share links. Supports one-time and time-based access, public and password-protected links, view counting, and atomic race-condition handling.
+A secure note-sharing application that allows users to create notes and share them using secure expiring share links.
 
----
+Users can create notes with:
 
-## Tech Stack
+- Title
+- Content
+- Expiry date/time
+- Share type
+- Access type
 
-| Layer | Technology |
-|---|---|
-| Frontend | React.js, React Router v6, Tailwind CSS |
-| Backend | Express.js, Node.js |
-| Database | MongoDB Atlas + Mongoose |
-| Auth | JWT (jsonwebtoken + bcryptjs) |
-| Security | express-rate-limit, bcrypt hashing, crypto.randomBytes |
+Share links support:
 
----
+- One-time access
+- Time-based access
+- Public access
+- Password-protected access
 
-## Setup Instructions
 
-### Prerequisites
-- Node.js v18+
-- MongoDB Atlas account (free tier works)
-- npm or yarn
+# Setup Instructions
 
-### 1. Clone the repository
+## Prerequisites
+
+Make sure you have installed:
+
+- Node.js
+- MongoDB
+- npm
+
+
+## Clone Repository
 
 ```bash
-git clone <repo-url>
-cd note-app
+git clone <https://github.com/Nithishkumar-Thinakaran/notes-app>
+
+cd note-taking-app
 ```
 
-### 2. Backend setup
+
+## Backend Setup
+
+Go to backend folder:
 
 ```bash
 cd backend
-npm install
-cp .env.example .env
 ```
 
-Edit `.env`:
+Install dependencies:
+
+```bash
+npm install
+```
+
+
+Create `.env` file:
+
 ```env
 PORT=5000
-MONGODB_URI=mongodb+srv://<user>:<pass>@cluster0.xxxxx.mongodb.net/noteapp
-JWT_SECRET=your_super_secret_key_min_32_chars
-JWT_EXPIRE=7d
+
+MONGO_URI=mongodb+srv://noteapp:Nk315862@cluster0.3epymso.mongodb.net/?appName=Cluster0
+
+JWT_SECRET=your_super_secret_key
+
 FRONTEND_URL=http://localhost:3000
-NODE_ENV=development
-```
+
 
 Start backend:
+
 ```bash
-npm run dev        # development (nodemon)
-npm start          # production
+npm run dev
 ```
 
-### 3. Frontend setup
+
+Backend runs on:
+
+```
+http://localhost:5000
+```
+
+
+
+## Frontend Setup
+
+Open another terminal:
 
 ```bash
 cd frontend
-npm install
-npm start          # starts on http://localhost:3000
 ```
 
-The frontend proxies `/api` requests to `http://localhost:5000` (configured in `package.json`).
-
-### 4. Production build
+Install dependencies:
 
 ```bash
-cd frontend && npm run build
+npm install
 ```
 
-Serve the `build/` folder via Express or a static host.
 
----
+Start frontend:
 
-## Database Schema
+```bash
+npm run dev
+```
 
-### User Collection
 
-```js
+Frontend runs on:
+
+```
+http://localhost:3000
+```
+
+
+
+# Tech Stack Used
+
+
+## Frontend
+
+- React.js
+- Tailwind CSS
+- Axios
+- React Router
+
+
+## Backend
+
+- Node.js
+- Express.js
+- MongoDB
+- Mongoose
+
+
+## Authentication
+
+- JWT Authentication
+- bcrypt password hashing
+
+
+## Security
+
+- Secure random share tokens
+- Password hashing
+- Expiry validation
+- Atomic database updates
+
+
+
+# Database Schema
+
+
+## User Collection
+
+```json
 {
-  _id: ObjectId,
-  username: String,       // unique, 3-30 chars
-  email: String,          // unique, lowercase
-  password: String,       // bcrypt hash, not returned by default
-  createdAt: Date,
-  updatedAt: Date
+  "_id": ObjectId,
+  "username": String,
+  "email": String,
+  "password": String,
+  "createdAt": Date,
+  "updatedAt": Date
 }
 ```
 
-### Note Collection
 
-Notes embed share tokens as a subdocument array. This collocates all share metadata with the note, enabling atomic updates.
+Example:
 
-```js
+```json
 {
-  _id: ObjectId,
-  title: String,          // max 200 chars
-  content: String,        // max 50,000 chars
-  owner: ObjectId,        // ref: User
+  "_id": "6a40b385fdc72758162bf424",
+  "username": "kumar",
+  "email": "user@gmail.com",
+  "password": "hashed_password",
+  "createdAt": "2026-06-28T05:39:17.114Z"
+}
+```
 
-  shareTokens: [
+
+
+## Note Collection
+
+```json
+{
+  "_id": ObjectId,
+
+  "title": String,
+
+  "content": String,
+
+  "owner": ObjectId,
+
+  "totalViews": Number,
+
+  "shareTokens": [
     {
-      token: String,          // 64-char hex (32 random bytes), indexed
-      shareType: "one-time" | "time-based",
-      accessType: "public" | "password-protected",
-      passwordHash: String,   // bcrypt hash, null for public
-      generatedPassword: String, // cleared from DB after first API response
-      expiresAt: Date,
-      isRevoked: Boolean,     // default false
-      isUsed: Boolean,        // default false, only relevant for one-time
-      viewCount: Number,      // default 0
-      createdAt: Date
+      "token": String,
+
+      "shareType":
+      "one-time | time-based",
+
+      "accessType":
+      "public | password-protected",
+
+      "passwordHash": String,
+
+      "expiresAt": Date,
+
+      "isRevoked": Boolean,
+
+      "isUsed": Boolean,
+
+      "viewCount": Number,
+
+      "createdAt": Date
     }
   ],
 
-  createdAt: Date,
-  updatedAt: Date
+  "createdAt": Date,
+  "updatedAt": Date
 }
 ```
 
-**Index:** `shareTokens.token` is indexed for O(1) token lookups.
 
----
+Example:
 
-## Share Link Flow
+```json
+{
+"title":"message",
 
-```
-User fills note form
-        │
-        ▼
-POST /api/notes
-  ├── Generates 64-char hex token (crypto.randomBytes(32))
-  ├── If password-protected: generates XXXX-XXXX-XXXX access key
-  ├── Hashes access key with bcrypt (cost 12)
-  ├── Stores token + hash + settings in shareTokens[]
-  └── Returns token + plain-text key (once only) to user
+"content":"hiii hello",
 
-User shares URL: /share/<token>
-        │
-        ▼
-GET /api/share/:token/meta
-  └── Returns { accessType, shareType, expiresAt }
-      (does not access note content, no view count change)
+"owner":"user_id",
 
-        │
-        ▼
-If public  ──────────────────────────────────▶ POST /api/share/:token/access
-If password-protected → show password prompt → POST /api/share/:token/access
-                                                  with { password }
-```
+"totalViews":11,
 
----
+"shareTokens":[
 
-## Password / Access Key Generation Logic
+{
+"token":"secure_random_token",
 
-```
-generateAccessKey():
-  charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-  (Excluded: O, 0, I, 1 — visually ambiguous characters)
+"shareType":"time-based",
 
-  segment() = 4 random chars from charset
-  key = segment() + "-" + segment() + "-" + segment()
-  → e.g. "K7MN-3PQR-9XZT"
+"accessType":"public",
 
-  Entropy: 34^12 ≈ 2.25 × 10^18 combinations
-```
+"expiresAt":"2026-06-29T08:00:00Z",
 
-The plain-text key is returned **once** in the API response and then cleared from the database (`generatedPassword` set to `null`). Only the bcrypt hash is retained.
+"isRevoked":false,
 
----
+"isUsed":false,
 
-## Expiry Logic
+"viewCount":7
+}
 
-Expiry is enforced at every access point:
-
-```js
-validateShareToken(shareToken):
-  if (shareToken.isRevoked)            → { valid: false, reason: "revoked" }
-  if (new Date() > shareToken.expiresAt) → { valid: false, reason: "expired" }
-  if (one-time && shareToken.isUsed)   → { valid: false, reason: "already_used" }
-  else                                 → { valid: true }
-```
-
-This check runs before any content is returned and before any view count increment.
-
-- **Time-based:** The link is accessible from creation until `expiresAt`. After that, all access attempts return HTTP 410.
-- **One-time:** The link is accessible only once within its `expiresAt` window. After the first successful access, `isUsed` is set to `true`.
-
----
-
-## Invalidate / Revoke Logic
-
-Owners can revoke any share link via:
-
-```
-DELETE /api/notes/:noteId/share/:token
-```
-
-This sets `shareTokens.$.isRevoked = true` using Mongoose. The token remains in the database for audit purposes but is rejected at the `validateShareToken` step. The note and other share links are unaffected.
-
----
-
-## View Count Logic
-
-| Event | Count changes? |
-|---|---|
-| Public link accessed successfully | ✅ +1 |
-| Password-protected link, correct key | ✅ +1 |
-| Password-protected link, wrong key | ❌ No change |
-| Expired link access attempt | ❌ No change |
-| Revoked link access attempt | ❌ No change |
-| One-time link already used | ❌ No change |
-| `/meta` endpoint (pre-check) | ❌ No change |
-
-View count is incremented **after** all validation and authentication checks pass, using MongoDB's `$inc` operator for atomicity.
-
----
-
-## Race Condition Handling
-
-The critical race condition occurs when two requests arrive simultaneously for a one-time link. Both pass the initial `isUsed: false` check before either can write.
-
-**Solution: Atomic conditional `findOneAndUpdate`**
-
-```js
-const result = await Note.findOneAndUpdate(
-  {
-    _id: note._id,
-    'shareTokens.token': token,
-    'shareTokens.isUsed': false,     // ← Only matches if NOT already used
-    'shareTokens.isRevoked': false,
-  },
-  {
-    $set: { 'shareTokens.$.isUsed': true },
-    $inc: { 'shareTokens.$.viewCount': 1 }
-  },
-  { new: true }
-);
-
-if (!result) {
-  // The query filter didn't match — another request already set isUsed = true
-  return res.status(409).json({ error: 'already_used' });
+]
 }
 ```
 
-MongoDB's document-level locking guarantees that only one write wins. The `isUsed: false` filter in the query acts as an optimistic lock — if another request has already changed `isUsed` to `true`, this query will find no matching document and `result` will be `null`, triggering a 409 response to the second request.
 
-This is equivalent to a compare-and-swap (CAS) operation and avoids the need for application-level mutexes or Redis locks for this use case.
 
----
+# Share Link Flow
 
-## API Endpoints
 
-### Auth
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/api/auth/register` | — | Register new user |
-| POST | `/api/auth/login` | — | Login, get JWT |
-| GET | `/api/auth/me` | JWT | Get current user |
+1. User creates a note.
 
-### Notes
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/notes` | JWT | List all user notes |
-| POST | `/api/notes` | JWT | Create note + share link |
-| GET | `/api/notes/:id` | JWT | Get note with share info |
-| POST | `/api/notes/:id/share` | JWT | Add new share link to note |
-| DELETE | `/api/notes/:id/share/:token` | JWT | Revoke a share link |
-| DELETE | `/api/notes/:id` | JWT | Delete a note |
 
-### Share (public)
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/share/:token/meta` | — | Get link metadata (type, expiry) |
-| POST | `/api/share/:token/access` | — | Access note content |
+2. User selects:
 
----
+- Expiry time
+- Share type
+- Access type
 
-## Pages
 
-| Route | Description |
-|---|---|
-| `/login` | Sign in page |
-| `/register` | Create account page |
-| `/notes/new` | Create a note and generate share link |
-| `/notes/:id` | View note, manage share links, revoke |
-| `/share/:token` | Public share view (password prompt if protected) |
+3. Backend creates a secure random token.
 
----
 
-## Security Notes
+Example:
 
-- Passwords and access keys are hashed with bcrypt (cost factor 12)
-- Share tokens use `crypto.randomBytes(32)` — 256-bit entropy
-- Generated access key plain text is cleared from DB immediately after creation
-- Rate limiting: 100 req/15min globally, 20 req/5min on share endpoints
-- JWT expiry: 7 days (configurable via `JWT_EXPIRE`)
-- CORS restricted to `FRONTEND_URL` in production
+```
+/share/1a7b9e6bdfecd5fac9c0465a92a74e09
+```
+
+
+4. Token is stored inside the note document.
+
+
+5. When someone opens the share URL:
+
+Backend validates:
+
+- Token exists
+- Token is not revoked
+- Token is not expired
+- One-time link is not already used
+
+
+6. Access handling:
+
+Public link:
+
+```
+Open directly
+```
+
+
+Password protected link:
+
+```
+Ask for access key
+```
+
+
+7. Successful access updates view count.
+
+
+
+# Password / Key Generation Logic
+
+
+For password protected links:
+
+
+1. Backend generates a random access key.
+
+
+Example:
+
+```
+ABCD-1234-XYZ
+```
+
+
+2. Password is encrypted using bcrypt.
+
+
+3. Only hashed password is stored.
+
+
+Example:
+
+```
+$2a$12$xxxxxxxxxxxx
+```
+
+
+4. During access:
+
+User enters password.
+
+Backend verifies:
+
+```
+Entered password
+        |
+        v
+bcrypt compare()
+        |
+        v
+Stored hash
+```
+
+
+Correct password:
+
+```
+Access granted
+```
+
+
+Wrong password:
+
+```
+Access denied
+```
+
+View count does not increase.
+
+
+
+# Expiry Logic
+
+
+## Time Based Link
+
+
+Each share link stores:
+
+```json
+{
+"expiresAt":"date"
+}
+```
+
+
+During access:
+
+Backend checks:
+
+```
+current time < expiry time
+```
+
+
+If valid:
+
+```
+Allow access
+```
+
+
+If expired:
+
+```
+Reject request
+```
+
+
+Expired links do not increase views.
+
+
+
+## One Time Link
+
+
+One-time links contain:
+
+```json
+{
+"isUsed":false
+}
+```
+
+
+First successful access:
+
+```
+isUsed = true
+```
+
+
+Further attempts:
+
+```
+Link already used
+```
+
+
+No additional views are counted.
+
+
+
+# Invalidate / Revoke Logic
+
+
+Owner can revoke a generated share link.
+
+
+Database update:
+
+```json
+{
+"isRevoked":true
+}
+```
+
+
+During access:
+
+Backend checks:
+
+```
+isRevoked === false
+```
+
+
+If revoked:
+
+```
+Access denied
+```
+
+
+The share link immediately stops working.
+
+
+
+# View Count Logic
+
+
+View count increases only after successful access.
+
+
+## Public Link
+
+Successful opening:
+
+```
+viewCount + 1
+totalViews + 1
+```
+
+
+
+## Password Protected Link
+
+Correct password:
+
+```
+viewCount + 1
+totalViews + 1
+```
+
+
+Wrong password:
+
+```
+No update
+```
+
+
+
+## Expired Link
+
+```
+No update
+```
+
+
+## Revoked Link
+
+```
+No update
+```
+
+
+## One Time Link
+
+First successful access:
+
+```
+viewCount + 1
+
+isUsed = true
+```
+
+
+Second attempt:
+
+```
+Rejected
+```
+
+
+
+# Race Condition Handling
+
+
+Problem:
+
+Two users open the same one-time link at the same time.
+
+
+Solution:
+
+Atomic MongoDB update.
+
+
+Example:
+
+```javascript
+findOneAndUpdate(
+{
+ token,
+ isUsed:false
+},
+{
+ $set:{
+  isUsed:true
+ },
+
+ $inc:{
+  viewCount:1,
+  totalViews:1
+ }
+}
+)
+```
+
+
+Only one request can change:
+
+```
+isUsed:false
+```
+
+to:
+
+```
+isUsed:true
+```
+
+
+The second request fails.
+
+This prevents multiple users from consuming a one-time link.
+
+
+
+# Features Completed
+
+
+✅ User authentication  
+✅ Create notes  
+✅ Secure share links  
+✅ Public sharing  
+✅ Password protected sharing  
+✅ One-time access links  
+✅ Time based expiry  
+✅ Revoke share links  
+✅ View tracking  
+✅ Password hashing  
+✅ Race-condition handling  
+
+
+# Demo Flow
+
+
+The demo shows:
+
+
+1. User registration/login
+
+2. Create note
+
+3. Generate share link
+
+4. Public share access
+
+5. Password protected access
+
+6. Wrong password handling
+
+7. One-time link expiry
+
+8. Time expiry
+
+9. Revoke link
+
+10. View count update
