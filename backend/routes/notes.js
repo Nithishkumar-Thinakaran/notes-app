@@ -16,29 +16,29 @@ router.use(protect);
 // GET /api/notes - Get all notes for the logged-in user
 router.get('/', async (req, res) => {
   try {
-    const notes = await Note.find({ owner: req.user._id })
-      .select('title createdAt updatedAt shareTokens')
-      .sort({ updatedAt: -1 });
+    const notes = await Note.find({ owner: req.user._id }).sort({ updatedAt: -1 });
 
-    // Map notes to include summary share info
     const notesWithSummary = notes.map(note => ({
       _id: note._id,
       title: note.title,
+      content: note.content,
+      totalViews: note.totalViews,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt,
       shareCount: note.shareTokens.length,
-      activeShares: note.shareTokens.filter(t => {
-        const v = validateShareToken(t);
-        return v.valid;
-      }).length
+      activeShares: note.shareTokens.filter(token => validateShareToken(token).valid).length
     }));
 
-    res.json({ notes: notesWithSummary });
+    res.json({
+      notes: notesWithSummary
+    });
+
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch notes' });
+    res.status(500).json({
+      error: 'Failed to fetch notes'
+    });
   }
 });
-
 // POST /api/notes - Create a new note with a share link
 router.post('/', async (req, res) => {
   try {
@@ -227,6 +227,46 @@ router.post('/:id/share', async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate share link' });
+  }
+});
+
+// PUT /api/notes/:id - Update a note
+router.put('/:id', async (req, res) => {
+  try {
+
+    const { title, content } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({
+        error: 'Title and content are required'
+      });
+    }
+
+    const note = await Note.findOne({
+      _id: req.params.id,
+      owner: req.user._id
+    });
+
+    if (!note) {
+      return res.status(404).json({
+        error: 'Note not found'
+      });
+    }
+
+    note.title = title;
+    note.content = content;
+
+    await note.save();
+
+    res.json({
+      message: 'Note updated successfully',
+      note
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: 'Failed to update note'
+    });
   }
 });
 

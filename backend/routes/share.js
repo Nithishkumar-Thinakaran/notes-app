@@ -1,5 +1,4 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const Note = require('../models/Note');
 const { validateShareToken, comparePassword } = require('../utils/tokenUtils');
 
@@ -8,16 +7,23 @@ const router = express.Router();
 /**
  * GET /api/share/:token/meta
  * Returns metadata about a share link without accessing the note content.
- * Used by the frontend to know whether to show a password prompt.
+ * Used by the frontend to determine whether a password prompt is required.
  */
 router.get('/:token/meta', async (req, res) => {
   try {
     const note = await Note.findByToken(req.params.token);
+
     if (!note) {
-      return res.status(404).json({ error: 'invalid_token', message: 'This share link does not exist.' });
+      return res.status(404).json({
+        error: 'invalid_token',
+        message: 'This share link does not exist.'
+      });
     }
 
-    const shareToken = note.shareTokens.find(t => t.token === req.params.token);
+    const shareToken = note.shareTokens.find(
+      (t) => t.token === req.params.token
+    );
+
     const validation = validateShareToken(shareToken);
 
     if (!validation.valid) {
@@ -32,31 +38,43 @@ router.get('/:token/meta', async (req, res) => {
       shareType: shareToken.shareType,
       expiresAt: shareToken.expiresAt
     });
+
   } catch (err) {
-    res.status(500).json({ error: 'server_error', message: 'Server error' });
+    console.error(err);
+    res.status(500).json({
+      error: 'server_error',
+      message: 'Server error'
+    });
   }
 });
 
 /**
  * POST /api/share/:token/access
- * Access the shared note. Handles public and password-protected access.
- * 
- * Race condition handling for one-time links:
- * Uses MongoDB's findOneAndUpdate with atomic $set to mark token as used,
- * with a query filter that only matches if isUsed === false.
- * If another request already used it, the update returns null → 409 Conflict.
+ * Handles:
+ * - Public share
+ * - Password-protected share
+ * - One-time links
+ * - Time-based links
  */
 router.post('/:token/access', async (req, res) => {
   try {
+
     const { password } = req.body;
     const { token } = req.params;
 
     const note = await Note.findByToken(token);
+
     if (!note) {
-      return res.status(404).json({ error: 'invalid_token', message: 'This share link does not exist.' });
+      return res.status(404).json({
+        error: 'invalid_token',
+        message: 'This share link does not exist.'
+      });
     }
 
-    const shareToken = note.shareTokens.find(t => t.token === token);
+    const shareToken = note.shareTokens.find(
+      (t) => t.token === token
+    );
+
     const validation = validateShareToken(shareToken);
 
     if (!validation.valid) {
@@ -66,82 +84,131 @@ router.post('/:token/access', async (req, res) => {
       });
     }
 
-    // Password check (does NOT increment view count on failure)
+    // Password protected access
     if (shareToken.accessType === 'password-protected') {
+
       if (!password) {
-        return res.status(401).json({ error: 'password_required', message: 'A password is required.' });
+        return res.status(401).json({
+          error: 'password_required',
+          message: 'Password is required.'
+        });
       }
-      const isMatch = await comparePassword(password, shareToken.passwordHash);
+
+      const isMatch = await comparePassword(
+        password,
+        shareToken.passwordHash
+      );
+
       if (!isMatch) {
-        return res.status(401).json({ error: 'wrong_password', message: 'Incorrect password or access key.' });
+        return res.status(401).json({
+          error: 'wrong_password',
+          message: 'Incorrect password or access key.'
+        });
       }
     }
 
-    // === ATOMIC ONE-TIME LINK HANDLING ===
-    // For one-time links: atomically mark as used only if not already used.
-    // This prevents race conditions where two requests arrive simultaneously.
+    // ---------- ONE-TIME LINK ----------
     if (shareToken.shareType === 'one-time') {
-      const result = await Note.findOneAndUpdate(
+
+      const updated = await Note.findOneAndUpdate(
         {
           _id: note._id,
           'shareTokens.token': token,
-          'shareTokens.isUsed': false,    // Only matches if NOT already used
-          'shareTokens.isRevoked': false,  // Only matches if NOT revoked
+          'shareTokens.isUsed': false,
+          'shareTokens.isRevoked': false
+        },
+                
+        {
+          $set: {
+            'shareTokens.$.isUsed': true
+          },
+          $inc: {
+            'shareTokens.$.viewCount': 1,
+            totalViews: 1
+          }
         },
         {
-          $set: { 'shareTokens.$.isUsed': true },
-          $inc: { 'shareTokens.$.viewCount': 1 }
-        },
-        { new: true }
+          new: true
+        }
       );
 
-      if (!result) {
-        // Another request beat us to it — the link was already used
+      if (!updated) {
         return res.status(409).json({
           error: 'already_used',
           message: 'This one-time link has already been used.'
         });
       }
 
-      // Find the updated note to get content
-      const updatedNote = await Note.findById(note._id);
+      const updatedShareToken = updated.shareTokens.find(
+        (t) => t.token === token
+      );
+
       return res.json({
-        title: updatedNote.title,
-        content: updatedNote.content,
-        accessType: shareToken.accessType,
-        shareType: shareToken.shareType,
-        viewCount: shareToken.viewCount + 1
+        title: updated.title,
+        content: updated.content,
+        accessType: updatedShareToken.accessType,
+        shareType: updatedShareToken.shareType,
+        viewCount: updatedShareToken.viewCount,
+        totalViews: updated.totalViews
       });
     }
 
-    // === TIME-BASED LINK HANDLING ===
-    // Atomically increment view count
+    // ---------- TIME-BASED LINK ----------
+
     await Note.updateOne(
-      { _id: note._id, 'shareTokens.token': token },
-      { $inc: { 'shareTokens.$.viewCount': 1 } }
+      {
+        _id: note._id,
+        'shareTokens.token': token
+      },
+      {
+        $inc: {
+          'shareTokens.$.viewCount': 1,
+          totalViews: 1
+        }
+      }
     );
 
+    const updatedNote = await Note.findById(note._id);
+
+if (!updatedNote) {
+  return res.status(404).json({
+    error: 'Note not found'
+  });
+}
+
+const updatedShareToken = updatedNote.shareTokens.find(
+  (t) => t.token === token
+);
+
     res.json({
-      title: note.title,
-      content: note.content,
-      accessType: shareToken.accessType,
-      shareType: shareToken.shareType,
-      expiresAt: shareToken.expiresAt,
-      viewCount: shareToken.viewCount + 1
+      title: updatedNote.title,
+      content: updatedNote.content,
+      accessType: updatedShareToken.accessType,
+      shareType: updatedShareToken.shareType,
+      expiresAt: updatedShareToken.expiresAt,
+      viewCount: updatedShareToken.viewCount,
+      totalViews: updatedNote.totalViews
     });
+
   } catch (err) {
     console.error('Share access error:', err);
-    res.status(500).json({ error: 'server_error', message: 'Server error' });
+
+    res.status(500).json({
+      error: 'server_error',
+      message: 'Server error'
+    });
   }
 });
 
 function getErrorMessage(reason) {
+
   const messages = {
     invalid_token: 'This share link does not exist.',
     revoked: 'This share link has been revoked by the owner.',
     expired: 'This share link has expired.',
     already_used: 'This one-time link has already been used.'
   };
+
   return messages[reason] || 'This share link is no longer valid.';
 }
 

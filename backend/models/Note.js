@@ -40,6 +40,7 @@ const shareTokenSchema = new mongoose.Schema({
     default: false
   },
 
+  // Views through this particular share link
   viewCount: {
     type: Number,
     default: 0
@@ -70,6 +71,12 @@ const noteSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true
+    },
+
+    // Total views across all share links
+    totalViews: {
+      type: Number,
+      default: 0
     },
 
     shareTokens: [shareTokenSchema]
