@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
 import NewNote from './pages/NewNote';
 import NoteDetail from './pages/NoteDetail';
 import ShareView from './pages/ShareView';
@@ -29,7 +30,7 @@ const PublicRoute = ({ children }) => {
 
   if (loading) return <LoadingScreen />;
 
-  return !user ? children : <Navigate to="/notes/new" replace />;
+  return !user ? children : <Navigate to="/dashboard" replace />;
 };
 
 function AppRoutes() {
@@ -61,6 +62,15 @@ function AppRoutes() {
 
         {/* Protected Routes */}
         <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/notes/new"
           element={
             <ProtectedRoute>
@@ -89,7 +99,7 @@ function AppRoutes() {
           path="/"
           element={
             <Navigate
-              to={user ? "/notes/new" : "/login"}
+              to={user ? "/dashboard" : "/login"}
               replace
             />
           }

@@ -63,6 +63,8 @@ router.post('/:token/access', async (req, res) => {
     const { token } = req.params;
 
     const note = await Note.findByToken(token);
+    console.log("Token:", token);
+console.log("Note Found:", note ? "YES" : "NO");
 
     if (!note) {
       return res.status(404).json({
@@ -74,6 +76,8 @@ router.post('/:token/access', async (req, res) => {
     const shareToken = note.shareTokens.find(
       (t) => t.token === token
     );
+    console.log("Share Token:");
+console.log(shareToken);
 
     const validation = validateShareToken(shareToken);
 
@@ -154,19 +158,28 @@ router.post('/:token/access', async (req, res) => {
     }
 
     // ---------- TIME-BASED LINK ----------
+    if (req.session?.viewed === token) {
+    return res.json({
+        title: note.title,
+        content: note.content,
+        viewCount: shareToken.viewCount,
+        totalViews: note.totalViews
+    });
+}
+    const result = await Note.updateOne(
+  {
+    _id: note._id,
+    "shareTokens.token": token
+  },
+  {
+    $inc: {
+      "shareTokens.$.viewCount": 1,
+      totalViews: 1
+    }
+  }
+);
 
-    await Note.updateOne(
-      {
-        _id: note._id,
-        'shareTokens.token': token
-      },
-      {
-        $inc: {
-          'shareTokens.$.viewCount': 1,
-          totalViews: 1
-        }
-      }
-    );
+console.log(result);
 
     const updatedNote = await Note.findById(note._id);
 

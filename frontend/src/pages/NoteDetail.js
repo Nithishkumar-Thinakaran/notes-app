@@ -22,6 +22,12 @@ export default function NoteDetail() {
   const [newShareResult, setNewShareResult] = useState(null);
   const [newShareLoading, setNewShareLoading] = useState(false);
 
+  // Edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ title: '', content: '' });
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState('');
+
   const defaultExpiry = () => {
     const d = new Date(); d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 16);
@@ -39,6 +45,36 @@ export default function NoteDetail() {
   }, [id]);
 
   useEffect(() => { fetchNote(); }, [fetchNote]);
+
+  const handleEditStart = () => {
+    setEditForm({ title: note.title, content: note.content });
+    setEditError('');
+    setIsEditing(true);
+  };
+
+  const handleEditCancel = () => {
+    setIsEditing(false);
+    setEditError('');
+  };
+
+  const handleEditSave = async (e) => {
+    e.preventDefault();
+    if (!editForm.title.trim() || !editForm.content.trim()) {
+      setEditError('Title and content are required');
+      return;
+    }
+    setEditLoading(true);
+    setEditError('');
+    try {
+      await api.put(`/notes/${id}`, { title: editForm.title, content: editForm.content });
+      await fetchNote();
+      setIsEditing(false);
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Failed to save changes');
+    } finally {
+      setEditLoading(false);
+    }
+  };
 
   const handleRevoke = async (token) => {
     if (!window.confirm('Revoke this share link? This cannot be undone.')) return;
@@ -80,7 +116,7 @@ export default function NoteDetail() {
     if (!window.confirm('Delete this note? All share links will stop working.')) return;
     try {
       await api.delete(`/notes/${id}`);
-      navigate('/notes/new');
+      navigate('/dashboard');
     } catch (err) {
       alert('Failed to delete note');
     }
@@ -95,93 +131,111 @@ export default function NoteDetail() {
   if (error) return (
     <div className="max-w-2xl mx-auto px-4 py-16 text-center">
       <p className="text-gray-400 mb-4">{error}</p>
-      <Link to="/notes/new" className="btn-primary">Go home</Link>
+      <Link to="/dashboard" className="btn-primary">Back to dashboard</Link>
     </div>
   );
 
+  // Compute totalViews from shareLinks since GET /api/notes/:id doesn't return it directly
+  const totalViews = note.totalViews ?? note.shareLinks.reduce((sum, l) => sum + (l.viewCount || 0), 0);
+  const activeShares = note.shareLinks.filter(l => l.status === 'active').length;
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
+
+      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">{note.title}</h1>
-          <p className="text-xs text-gray-500 mt-1">Created {new Date(note.createdAt).toLocaleString()}</p>
+          <Link to="/dashboard" className="text-xs text-gray-500 hover:text-gray-300 transition-colors mb-2 inline-block">
+            ← Dashboard
+          </Link>
+          {!isEditing && (
+            <h1 className="text-2xl font-bold text-white">{note.title}</h1>
+          )}
+          <p className="text-xs text-gray-500 mt-1">
+            Created {new Date(note.createdAt).toLocaleString()}
+          </p>
         </div>
-        <button onClick={handleDelete} className="btn-danger shrink-0">Delete note</button>
-      </div>
-
-      <div className="card">
-        <p className="text-gray-300 whitespace-pre-wrap text-sm leading-relaxed">{note.content}</p>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-200">Share links</h2>
-          <button
-            onClick={() => { setShowNewShare(s => !s); setNewShareForm({ expiresAt: defaultExpiry(), shareType: 'time-based', accessType: 'public' }); setNewShareResult(null); }}
-            className="btn-secondary text-sm py-1.5"
-          >
-            + New link
-          </button>
-        </div>
-
-        {showNewShare && (
-          <div className="card border-dashed space-y-4">
-            {newShareResult ? (
-              <div className="space-y-3">
-                <p className="text-sm text-green-400 font-medium">✓ New link generated</p>
-                <div className="flex gap-2">
-                  <input readOnly className="input font-mono text-xs flex-1"
-                    value={`${window.location.origin}/share/${newShareResult.token}`} />
-                  <button className="btn-secondary text-sm" onClick={() => handleCopy(`${window.location.origin}/share/${newShareResult.token}`, 'new')}>
-                    {copiedToken === 'new' ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-                {newShareResult.generatedPassword && (
-                  <div className="bg-amber-900/20 border border-amber-800/40 rounded-lg p-3">
-                    <p className="text-xs text-amber-300 mb-2">⚠ Save this access key — shown only once</p>
-                    <code className="font-mono text-base text-amber-100 tracking-widest block text-center bg-amber-900/20 rounded px-3 py-2">
-                      {newShareResult.generatedPassword}
-                    </code>
-                  </div>
-                )}
-                <button onClick={() => { setShowNewShare(false); setNewShareResult(null); }} className="btn-secondary w-full text-sm">Close</button>
-              </div>
-            ) : (
-              <form onSubmit={handleNewShare} className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-300">Generate new share link</h3>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Expires at</label>
-                  <input type="datetime-local" className="input text-sm"
-                    value={newShareForm.expiresAt}
-                    min={new Date().toISOString().slice(0, 16)}
-                    onChange={e => setNewShareForm(f => ({ ...f, expiresAt: e.target.value }))}
-                    required />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Share type</label>
-                    <select className="input text-sm" value={newShareForm.shareType}
-                      onChange={e => setNewShareForm(f => ({ ...f, shareType: e.target.value }))}>
-                      <option value="time-based">Time-based</option>
-                      <option value="one-time">One-time</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Access</label>
-                    <select className="input text-sm" value={newShareForm.accessType}
-                      onChange={e => setNewShareForm(f => ({ ...f, accessType: e.target.value }))}>
-                      <option value="public">Public</option>
-                      <option value="password-protected">Password protected</option>
-                    </select>
-                  </div>
-                </div>
-                <button type="submit" className="btn-primary w-full text-sm" disabled={newShareLoading}>
-                  {newShareLoading ? 'Generating...' : 'Generate'}
-                </button>
-              </form>
-            )}
+        {!isEditing && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={handleEditStart} className="btn-secondary text-sm py-1.5">
+              Edit
+            </button>
+            <button onClick={handleDelete} className="btn-danger">Delete</button>
           </div>
         )}
+      </div>
+
+      {/* Stats row */}
+<div className="grid grid-cols-2 gap-3">
+  {[
+    { label: 'Total Views', value: totalViews },
+    { label: 'Active Links', value: activeShares, accent: true },
+  ].map(s => (
+    <div 
+      key={s.label} 
+      className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2.5 text-center"
+    >
+      <div className={`text-xl font-bold ${s.accent ? 'text-indigo-400' : 'text-gray-100'}`}>
+        {s.value}
+      </div>
+      <div className="text-xs text-gray-500 mt-0.5">
+        {s.label}
+      </div>
+    </div>
+  ))}
+</div>
+
+      {/* Note content / Edit form */}
+      {isEditing ? (
+        <form onSubmit={handleEditSave} className="card space-y-4">
+          <h2 className="text-sm font-medium text-gray-300">Edit note</h2>
+
+          {editError && (
+            <div className="bg-red-900/30 border border-red-800/50 text-red-300 rounded-lg px-4 py-3 text-sm">
+              {editError}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1.5">Title</label>
+            <input
+              type="text"
+              className="input"
+              value={editForm.title}
+              onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+              maxLength={200}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1.5">Content</label>
+            <textarea
+              className="input min-h-40 resize-y"
+              value={editForm.content}
+              onChange={e => setEditForm(f => ({ ...f, content: e.target.value }))}
+              maxLength={50000}
+              required
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <button type="submit" className="btn-primary flex-1" disabled={editLoading}>
+              {editLoading ? 'Saving...' : 'Save changes'}
+            </button>
+            <button type="button" onClick={handleEditCancel} className="btn-secondary flex-1">
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="card">
+          <p className="text-gray-300 whitespace-pre-wrap text-sm leading-relaxed">{note.content}</p>
+        </div>
+      )}
+
+
 
         {note.shareLinks.length === 0 && (
           <p className="text-sm text-gray-500 text-center py-4">No share links yet</p>
@@ -228,6 +282,6 @@ export default function NoteDetail() {
           );
         })}
       </div>
-    </div>
+  
   );
 }

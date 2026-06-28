@@ -150,6 +150,7 @@ router.get('/:id', async (req, res) => {
         _id: note._id,
         title: note.title,
         content: note.content,
+        totalViews: note.totalViews,
         createdAt: note.createdAt,
         updatedAt: note.updatedAt,
         shareLinks
