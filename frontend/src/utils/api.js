@@ -1,8 +1,10 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' }
+  baseURL: 'https://notes-app-im6b.onrender.com/api',
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
 // Attach token to every request
